@@ -13,5 +13,5 @@ export interface DownloadState {
   info?: { title: string; duration?: number; thumbnail?: string }
   path?: string
   filename?: string
-  history: { title: string; format: string; filename: string; date: string }[]
+  history: { title: string; format: string; filename: string; date: string; url?: string }[]
 }

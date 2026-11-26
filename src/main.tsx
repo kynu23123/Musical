@@ -116,6 +116,15 @@ function App() {
     setSubmitted(false)
   }
 
+  async function redownload(item: DownloadState["history"][number]) {
+    if (busy || awaitingConfirmation) return
+    setError("")
+    setInvalid(false)
+    setSubmitted(true)
+    await command("redownload", { date: item.date, filename: item.filename })
+    setSubmitted(false)
+  }
+
   const phaseLabel = state.phase === "saving" ? "Saving in Chrome…"
     : awaitingConfirmation ? "Ready to save"
     : state.phase === "converting" ? "Converting…"
@@ -178,6 +187,10 @@ function App() {
           {state.history.slice(0, 5).map((item, index) => <li key={`${item.date}-${index}`}>
             <span className="file-format">{item.format.toUpperCase()}</span>
             <div><p title={item.title}>{item.title}</p><span>{new Date(item.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></div>
+            <Button type="button" variant="ghost" size="icon" className="history-redownload"
+              aria-label={`Redownload ${item.title} as ${item.format.toUpperCase()}`}
+              title={item.url ? `Redownload ${item.format.toUpperCase()}` : "Original link unavailable"}
+              disabled={busy || awaitingConfirmation || !state.connected || !item.url} onClick={() => redownload(item)}><RefreshCw /></Button>
           </li>)}
         </ul>}
       </section>

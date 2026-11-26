@@ -110,6 +110,7 @@ test('Chrome owns the download and history increments only after Chrome complete
   await app.flush();
   assert.equal(app.storage.state.total, 1);
   assert.equal(app.storage.state.history[0].title, 'Sample');
+  assert.equal(app.storage.state.history[0].url, 'https://example.com/video');
   assert.equal(app.storage.state.phase, 'complete');
   assert.ok(app.native.sent.some(message => message.action === 'release'));
 });
@@ -191,4 +192,42 @@ test('restoring a stopped worker preserves the count and clears a stale job', as
   const app = await setup({ total: 8, history: [], phase: 'downloading', connected: true });
   assert.equal(app.storage.state.total, 8);
   assert.equal(app.storage.state.phase, 'error');
+});
+
+test('history reload prepares the original URL and format and saves automatically', async () => {
+  const history = [{ title: 'Old video', filename: 'old.mp3', date: '2026-11-01', format: 'mp3', url: 'https://example.com/old' }];
+  const app = await setup({ history });
+  await app.send({ action: 'redownload', date: history[0].date, filename: history[0].filename });
+  assert.equal(app.native.sent.at(-1).url, history[0].url);
+  assert.equal(app.native.sent.at(-1).format, 'mp3');
+  assert.equal(app.storage.draft.format, 'mp3');
+  app.native.onMessage.emit({ type: 'prepared', filename: 'old.mp3', url: 'http://127.0.0.1:12000/' + 'a'.repeat(43) });
+  await app.flush();
+  assert.equal(app.storage.state.phase, 'saving');
+  assert.equal(app.options.length, 1);
+  const id = app.storage.state.downloadId;
+  app.items.get(id).state = 'complete';
+  app.chrome.downloads.onChanged.emit({ id, state: { current: 'complete' } });
+  await app.flush();
+  await app.send({ action: 'start', url: 'https://example.com/new', format: 'mp4' });
+  app.native.onMessage.emit({ type: 'prepared', filename: 'new.mp4', url: 'http://127.0.0.1:12000/' + 'b'.repeat(43) });
+  await app.flush();
+  assert.equal(app.storage.state.phase, 'prepared');
+  assert.equal(app.options.length, 1);
+});
+
+test('older YouTube history recovers the source ID including duplicate filenames', async () => {
+  const history = [{ title: 'Old video', filename: 'Old video [igQVceb5D24] (2).mp4', date: '2026-11-01', format: 'mp4' }];
+  const app = await setup({ history });
+  await app.send({ action: 'redownload', date: history[0].date, filename: history[0].filename });
+  assert.equal(app.native.sent.at(-1).url, 'https://www.youtube.com/watch?v=igQVceb5D24');
+  assert.equal(app.native.sent.at(-1).format, 'mp4');
+});
+
+test('unrecoverable or missing history entries fail without starting a download', async () => {
+  const history = [{ title: 'Unknown source', filename: 'old.mp3', date: '2026-11-01', format: 'mp3' }];
+  const app = await setup({ history });
+  assert.ok((await app.send({ action: 'redownload', date: history[0].date, filename: history[0].filename })).error);
+  assert.ok((await app.send({ action: 'redownload', date: 'missing', filename: 'missing.mp4' })).error);
+  assert.equal(app.native.sent.filter(message => message.action === 'download').length, 0);
 });

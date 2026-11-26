@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Musical",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Save video of choice from the side panel",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz0EKs3zMx4p7g6x3nWdAMc5m/brJ/bTufFEGomzML3DWz1gHua89d0BPXkMRTckKwhqZlIDbLB69p6rkFIWvEvyIK15LDHgxrTWq7vcbOkdChGb/VbIh3SLFy/zQBaDf37TJZgX+aa1oalH3bgquGoK2+935zJvD5VrrEHoLmptLZwDoNFvo5xK49arGFKQCJulKmaJxj4DI+qGcK0fi0Ab4/oJK7z8OpSZcPHIPI5himGfWkQihsWAcmvN467t7nm5gloBPagvQqm61dOw2VRgdefsdKx0p46sk/09SzkZ4cncytAptZfs762WLYArPp9D0kxI6DBcTS5QlLS0MpwIDAQAB",

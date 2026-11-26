@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
-import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -28,12 +27,13 @@ const context = await chromium.launchPersistentContext(path.join(work, `profile-
 });
 const files = [];
 try {
+  context.setDefaultTimeout(20000);
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   const id = new URL(worker.url()).host;
   const panelUrl = `chrome-extension://${id}/index.html`;
   const page = await context.newPage();
   const session = await context.newCDPSession(page);
-  await session.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.join(os.homedir(), 'Downloads') });
+  await session.send('Browser.setDownloadBehavior', { behavior: 'default' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(panelUrl);
@@ -95,19 +95,40 @@ try {
     execFileSync(ffmpeg, ['-v', 'error', '-xerror', '-i', snapshot.path, '-f', 'null', '-']);
   }
   assert.equal(snapshot.total, 2);
+  for (const format of ['mp3', 'mp4']) {
+    const previousCount = files.length;
+    await page.getByRole('button', { name: `Redownload musical-test as ${format.toUpperCase()}`, exact: true }).first().click();
+    await page.waitForFunction(total => {
+      return document.querySelectorAll('.history-section li').length === total
+        && document.querySelector('.download-status')?.textContent === 'Saved';
+    }, previousCount + 1, { timeout: 60000 });
+    snapshot = await worker.evaluate(async () => (await chrome.storage.local.get('state')).state);
+    assert.equal(snapshot.format, format);
+    assert.equal(snapshot.url, url);
+    assert.ok(!files.includes(snapshot.path));
+    assert.equal(path.extname(snapshot.path), `.${format}`);
+    assert.equal(await page.getByRole('button', { name: 'Confirm download?', exact: true }).count(), 0);
+    assert.equal((await worker.evaluate(async () => chrome.downloads.search({}))).length, previousCount + 1);
+    files.push(snapshot.path);
+    execFileSync(ffmpeg, ['-v', 'error', '-xerror', '-i', snapshot.path, '-f', 'null', '-']);
+  }
   await page.close();
   const reopened = await context.newPage();
   await reopened.goto(panelUrl);
-  await reopened.locator('.file-format', { hasText: 'MP3' }).waitFor();
-  await reopened.locator('.file-format', { hasText: 'MP4' }).waitFor();
+  await reopened.locator('.file-format', { hasText: 'MP3' }).first().waitFor();
+  await reopened.locator('.file-format', { hasText: 'MP4' }).first().waitFor();
   assert.equal(await reopened.locator('.lucide-check, .file-icon, .stats-card').count(), 0);
   await reopened.screenshot({ path: path.resolve(root, '../musical-preview.png'), fullPage: true });
   assert.equal(errors.length, 0, errors.join('\n'));
-  console.log('PASS: confirmation, cancellation, MP3, MP4, Chrome download history, Downloads location, media decoding, history labels, reopened panel, 280px layout.');
+  console.log('PASS: MP3/MP4 confirmation, automatic history redownload, distinct output files, Chrome download history, decoding, reopened panel, 280px layout.');
+} catch (error) {
+  const worker = context.serviceWorkers()[0];
+  if (worker) console.log('Browser failure state', await worker.evaluate(async () => (await chrome.storage.local.get('state')).state));
+  throw error;
 } finally {
   await context.close();
   await new Promise(resolve => server.close(resolve));
   for (const file of files) {
-    if (path.basename(file).startsWith('musical-test [musical-test]')) await fs.unlink(file);
+    if (path.basename(file).startsWith('musical-test [musical-test]')) await fs.unlink(file).catch(error => console.log('Temporary file cleanup', error.code));
   }
 }

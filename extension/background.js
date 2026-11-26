@@ -5,6 +5,13 @@ let serial = Promise.resolve();
 let state = { phase: "idle", connected: false, total: 0, history: [], error: "" };
 const loaded = chrome.storage.local.get("state").then(async ({ state: saved }) => {
   if (saved) state = { ...state, ...saved, connected: false };
+  state.history = state.history.map(item => {
+    if (item.url) return item;
+    const videoId = /\[([\w-]{11})\](?: \(\d+\))?\.(?:mp3|mp4)$/i.exec(item.filename || "")?.[1];
+    const url = videoId ? `https://www.youtube.com/watch?v=${videoId}`
+      : state.phase === "complete" && item.filename === state.filename ? state.url : undefined;
+    return { ...item, url };
+  });
   if (state.phase === "saving" && state.downloadId != null) {
     const [item] = await chrome.downloads.search({ id: state.downloadId });
     if (item?.state === "complete") {
@@ -44,7 +51,7 @@ async function finishBrowserDownload(item) {
     state.percent = 100;
     state.error = "";
     state.history = [{ title: state.info?.title || state.filename, format: state.format,
-      filename: state.filename, date: new Date().toISOString() }, ...state.history].slice(0, 20);
+      filename: state.filename, url: state.url, date: new Date().toISOString() }, ...state.history].slice(0, 20);
   } else if (item.state === "interrupted") {
     state.phase = item.error === "USER_CANCELED" ? "cancelled" : "error";
     state.error = state.phase === "error" ? `Chrome could not save the file (${item.error || "interrupted"}). Try again.` : "";
@@ -53,6 +60,24 @@ async function finishBrowserDownload(item) {
   }
   releaseFile();
   await save();
+}
+async function savePreparedFile() {
+  if (state.phase !== "prepared" || !preparedFile || !state.connected) {
+    throw new Error("The file is not ready to save. Start the download again.");
+  }
+  state.phase = "saving";
+  state.percent = null;
+  await save();
+  try {
+    state.downloadId = await chrome.downloads.download({ ...preparedFile,
+      saveAs: false, conflictAction: "uniquify" });
+    const [item] = await chrome.downloads.search({ id: state.downloadId });
+    if (item) await finishBrowserDownload(item);
+  } catch (error) {
+    releaseFile();
+    state.phase = "error";
+    state.error = `Chrome could not start the download. ${error.message}`;
+  }
 }
 chrome.downloads.onChanged.addListener(delta => enqueue(async () => {
   if (delta.id !== state.downloadId || !delta.state) return;
@@ -104,6 +129,7 @@ function connect() {
         state.filename = message.filename;
         state.percent = 100;
         preparedFile = { url: downloadUrl.href, filename: message.filename };
+        if (state.autoSave) await savePreparedFile();
         break;
       }
       case "cancelled":
@@ -169,18 +195,26 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       case "state":
         connect();
         break;
-      case "start": {
+      case "start":
+      case "redownload": {
         if (busy()) throw new Error("Wait for the current download.");
-        const url = new URL(message.url);
+        let request = message;
+        const redownload = message.action === "redownload";
+        if (redownload) {
+          request = state.history.find(item => item.date === message.date && item.filename === message.filename);
+          if (!request?.url) throw new Error("The original video link is unavailable for this download.");
+        }
+        const url = new URL(request.url);
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
           throw new Error("Paste a valid video link.");
         }
-        if (!["mp3", "mp4"].includes(message.format)) throw new Error("Choose MP3 or MP4.");
+        if (!["mp3", "mp4"].includes(request.format)) throw new Error("Choose MP3 or MP4.");
         if (!port || !state.connected) throw new Error("Connect the helper first.");
-        state = { ...state, phase: "starting", error: "", url: url.href, format: message.format,
+        state = { ...state, phase: "starting", error: "", url: url.href, format: request.format, autoSave: redownload,
           info: undefined, percent: null, speed: null, eta: null, path: "", filename: "", downloadId: null };
         await save();
-        port.postMessage({ action: "download", url: url.href, format: message.format });
+        if (redownload) await chrome.storage.local.set({ draft: { url: url.href, format: request.format } });
+        port.postMessage({ action: "download", url: url.href, format: request.format });
         break;
       }
       case "cancel":
@@ -203,22 +237,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         }
         break;
       case "confirm":
-        if (state.phase !== "prepared" || !preparedFile || !state.connected) {
-          throw new Error("The file is not ready to save. Start the download again.");
-        }
-        state.phase = "saving";
-        state.percent = null;
-        await save();
-        try {
-          state.downloadId = await chrome.downloads.download({ ...preparedFile,
-            saveAs: false, conflictAction: "uniquify" });
-          const [item] = await chrome.downloads.search({ id: state.downloadId });
-          if (item) await finishBrowserDownload(item);
-        } catch (error) {
-          releaseFile();
-          state.phase = "error";
-          state.error = `Chrome could not start the download. ${error.message}`;
-        }
+        await savePreparedFile();
         await save();
         break;
       case "folder":
