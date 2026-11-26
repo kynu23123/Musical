@@ -140,6 +140,29 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.id !== chrome.runtime.id) return;
+  if (message.action === "open-youtube") {
+    try {
+      const video = new URL(sender.tab?.url || "");
+      const videoId = video.searchParams.get("v");
+      if (sender.tab?.id == null || video.origin !== "https://www.youtube.com"
+        || video.pathname !== "/watch" || !/^[\w-]{11}$/.test(videoId || "")) {
+        throw new Error("Open a YouTube video first.");
+      }
+      // Chrome requires this call to stay inside the click's user gesture.
+      const opening = chrome.sidePanel.open({ tabId: sender.tab.id });
+      Promise.all([opening, enqueue(async () => {
+        if (busy()) return;
+        const { draft } = await chrome.storage.local.get("draft");
+        await chrome.storage.local.set({ draft: {
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          format: draft?.format === "mp3" ? "mp3" : "mp4",
+        } });
+      })]).then(() => reply({ success: true })).catch(error => reply({ error: error.message }));
+    } catch (error) {
+      reply({ error: error.message });
+    }
+    return true;
+  }
   enqueue(async () => {
     switch (message.action) {
       case "state":

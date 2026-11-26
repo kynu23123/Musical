@@ -1,0 +1,26 @@
+#musical-youtube-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  height: 36px;
+  margin-inline-start: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--yt-spec-badge-chip-background, #272727);
+  color: var(--yt-spec-text-primary, #fff);
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#musical-youtube-download:hover {
+  background: var(--yt-spec-button-chip-background-hover, #3f3f3f);
+}
+#musical-youtube-download:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+#musical-youtube-download:disabled { opacity: .65; cursor: wait; }
+#musical-youtube-download > svg { flex-shrink: 0; }

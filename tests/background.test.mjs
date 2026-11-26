@@ -13,10 +13,11 @@ async function setup(saved) {
   const native = { onMessage: event(), onDisconnect: event(), sent: [], postMessage(message) { this.sent.push(message); } };
   const items = new Map();
   const options = [];
+  const openedPanels = [];
   const chrome = {
     storage: { local: { get: async () => structuredClone(storage), set: async value => Object.assign(storage, structuredClone(value)) } },
     runtime: { id: 'test', onInstalled: event(), onMessage: event(), connectNative: () => native },
-    sidePanel: { setPanelBehavior: async () => {} },
+    sidePanel: { setPanelBehavior: async () => {}, open: value => { openedPanels.push(value); return Promise.resolve(); } },
     downloads: {
       onChanged: event(),
       download: async option => {
@@ -39,8 +40,43 @@ async function setup(saved) {
   await send({ action: 'state' });
   native.onMessage.emit({ type: 'ready', browserDownloads: true });
   await flush();
-  return { chrome, native, storage, send, flush, items, options };
+  return { chrome, native, storage, send, flush, items, options, openedPanels };
 }
+
+test('YouTube clicks open the panel synchronously and prefill only the video link', async () => {
+  const app = await setup();
+  app.storage.draft = { url: 'https://example.com/old', format: 'mp3' };
+  const reply = new Promise(resolve => app.chrome.runtime.onMessage.emit({ action: 'open-youtube' }, {
+    id: 'test', tab: { id: 23, url: 'https://www.youtube.com/watch?v=igQVceb5D24&list=radio&t=10' },
+  }, resolve));
+  assert.equal(app.openedPanels[0].tabId, 23);
+  assert.equal((await reply).success, true);
+  assert.equal(app.storage.draft.url, 'https://www.youtube.com/watch?v=igQVceb5D24');
+  assert.equal(app.storage.draft.format, 'mp3');
+  assert.equal(app.options.length, 0);
+});
+
+test('YouTube clicks preserve the draft during an existing job', async () => {
+  const app = await setup();
+  app.storage.draft = { url: 'https://example.com/active', format: 'mp4' };
+  await app.send({ action: 'start', url: 'https://example.com/active', format: 'mp4' });
+  const result = await new Promise(resolve => app.chrome.runtime.onMessage.emit({ action: 'open-youtube' }, {
+    id: 'test', tab: { id: 23, url: 'https://www.youtube.com/watch?v=igQVceb5D24' },
+  }, resolve));
+  assert.equal(result.success, true);
+  assert.equal(app.storage.draft.url, 'https://example.com/active');
+});
+
+test('the YouTube action rejects other origins and non-video pages', async () => {
+  const app = await setup();
+  for (const url of ['https://example.com/watch?v=igQVceb5D24', 'https://www.youtube.com/', 'https://www.youtube.com/watch?v=invalid']) {
+    const result = await new Promise(resolve => app.chrome.runtime.onMessage.emit({ action: 'open-youtube' }, {
+      id: 'test', tab: { id: 23, url },
+    }, resolve));
+    assert.ok(result.error);
+  }
+  assert.equal(app.openedPanels.length, 0);
+});
 
 test('Chrome owns the download and history increments only after Chrome completes', async () => {
   const app = await setup();

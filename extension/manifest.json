@@ -20,6 +20,13 @@
   "side_panel": {
     "default_path": "index.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["youtube.js"],
+      "css": ["youtube.css"]
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'"
   }

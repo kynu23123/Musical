@@ -60,14 +60,24 @@ function App() {
 
   useEffect(() => {
     if (!hasExtension) return
-    chrome.storage.local.get<{ draft?: { url: string; format: string } }>("draft").then(({ draft }) => {
-      if (draft) { setUrl(draft.url || ""); setFormat(draft.format || "mp4") }
-    })
-    command("state")
+    let draftUpdated = false
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === "local" && changes.state?.newValue) applyState(changes.state.newValue as DownloadState)
+      if (area !== "local") return
+      if (changes.state?.newValue) applyState(changes.state.newValue as DownloadState)
+      if (changes.draft?.newValue) {
+        draftUpdated = true
+        const draft = changes.draft.newValue as { url: string; format: string }
+        setUrl(draft.url || "")
+        setFormat(draft.format || "mp4")
+        setInvalid(false)
+        setError("")
+      }
     }
     chrome.storage.onChanged.addListener(changed)
+    chrome.storage.local.get<{ draft?: { url: string; format: string } }>("draft").then(({ draft }) => {
+      if (draft && !draftUpdated) { setUrl(draft.url || ""); setFormat(draft.format || "mp4") }
+    })
+    command("state")
     return () => chrome.storage.onChanged.removeListener(changed)
   }, [])
 
