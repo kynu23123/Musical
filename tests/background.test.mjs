@@ -67,6 +67,18 @@ test('YouTube clicks preserve the draft during an existing job', async () => {
   assert.equal(app.storage.draft.url, 'https://example.com/active');
 });
 
+
+test('Shorts clicks open the panel with the current Short link', async () => {
+  const app = await setup();
+  const result = await new Promise(resolve => app.chrome.runtime.onMessage.emit({ action: 'open-youtube' }, {
+    id: 'test', tab: { id: 25, url: 'https://www.youtube.com/shorts/BaW_jenozKc?feature=share' },
+  }, resolve));
+  assert.equal(result.success, true);
+  assert.equal(app.openedPanels[0].tabId, 25);
+  assert.equal(app.storage.draft.url, 'https://www.youtube.com/shorts/BaW_jenozKc');
+  assert.equal(app.options.length, 0);
+});
+
 test('the YouTube action rejects other origins and non-video pages', async () => {
   const app = await setup();
   for (const url of ['https://example.com/watch?v=igQVceb5D24', 'https://www.youtube.com/', 'https://www.youtube.com/watch?v=invalid']) {

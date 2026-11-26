@@ -23,4 +23,28 @@
   outline-offset: 3px;
 }
 #musical-youtube-download:disabled { opacity: .65; cursor: wait; }
-#musical-youtube-download > svg { flex-shrink: 0; }
+#musical-youtube-download .musical-download-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+#musical-youtube-download.musical-shorts-download {
+  flex-direction: column;
+  align-self: center;
+  gap: 6px;
+  width: 64px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #0f0f0f;
+  font-size: 12px;
+}
+html[dark] #musical-youtube-download.musical-shorts-download { color: #f1f1f1; }
+#musical-youtube-download.musical-shorts-download .musical-download-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--yt-spec-badge-chip-background, #272727);
+  color: var(--yt-spec-text-primary, #fff);
+}
+#musical-youtube-download.musical-shorts-download:hover .musical-download-icon {
+  background: var(--yt-spec-button-chip-background-hover, #3f3f3f);
+}

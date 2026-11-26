@@ -143,9 +143,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.action === "open-youtube") {
     try {
       const video = new URL(sender.tab?.url || "");
-      const videoId = video.searchParams.get("v");
+      const short = video.pathname.match(/^\/shorts\/([\w-]{11})\/?$/);
+      const videoId = short?.[1] || (video.pathname === "/watch" ? video.searchParams.get("v") : null);
       if (sender.tab?.id == null || video.origin !== "https://www.youtube.com"
-        || video.pathname !== "/watch" || !/^[\w-]{11}$/.test(videoId || "")) {
+        || !/^[\w-]{11}$/.test(videoId || "")) {
         throw new Error("Open a YouTube video first.");
       }
       // Chrome requires this call to stay inside the click's user gesture.
@@ -154,7 +155,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if (busy()) return;
         const { draft } = await chrome.storage.local.get("draft");
         await chrome.storage.local.set({ draft: {
-          url: `https://www.youtube.com/watch?v=${videoId}`,
+          url: short ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`,
           format: draft?.format === "mp3" ? "mp3" : "mp4",
         } });
       })]).then(() => reply({ success: true })).catch(error => reply({ error: error.message }));
